@@ -15,7 +15,6 @@ const Authsequelize = require("./Util/Database")
 const app = express()
 const helmet = require("helmet")
 const Compression = require("compression")
-const morgan = require("morgan")
 
 app.set('view engine', 'ejs')
 app.use(express.static(path.join(__dirname, 'public')));
@@ -27,11 +26,9 @@ app.use(Routes)
 app.use(ExpenseRoutes)
 app.use("/purchase", PurchaseRoute)
 
-const LogStream = fs.createWriteStream(path.join(__dirname,"access.log"), {flags:"a"})
 
 app.use(helmet())
 app.use(Compression())
-app.use(morgan("combined",{stream:LogStream}))
 
 User.hasMany(Expense)
 Expense.belongsTo(User)
