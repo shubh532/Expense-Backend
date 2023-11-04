@@ -1,19 +1,23 @@
-const Sequelize = require("sequelize")
+const mongoose = require("mongoose")
 
-const sequelize = require("../Util/Database")
-
-
-const PRRequest = sequelize.define("pr_request",{
-    id: {
-        type: Sequelize.UUID,
-        allowNull: false,
-        defaultValue: Sequelize.UUIDV4,
-        primaryKey: true
+const Schema = mongoose.Schema;
+//password reset request handling DB
+const PRRequestSchema = new Schema({
+    _id: {
+        type: String,
+        required: true
     },
-    isActive:{
-        type:Sequelize.BOOLEAN,
-        allowNull:false
+    isActive: {
+        type: Boolean,
+        default: false,
+        required: true
+    },
+
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        required: true
     }
 })
 
-module.exports=PRRequest
+module.exports = mongoose.model("PRRequest", PRRequestSchema)

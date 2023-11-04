@@ -1,16 +1,18 @@
-const ExpenseData = require("../Model/Expense")
+const Expense = require("../Model/Expense")
 const User = require("../Model/User")
-const sequelize = require("../Util/Database")
+const JsObject = require("../Util/ConvertToObj")
+const mongoose = require("mongoose")
 const uploadToS3 = require("../Services/AWS_S3")
 
 exports.getData = async (req, res, next) => {
     const id = req.user.id
     const page = req.query.page
     const Items_per_page = parseInt(req.query.limit)
+    const skipItems = (page - 1) * Items_per_page;
     try {
-        const totalItems = ExpenseData.count({ where: { userId: id } })
-        const dataPromise = ExpenseData.findAll({ where: { userId: id }, offset: (page - 1)*Items_per_page, limit: Items_per_page, order: [['createdAt', 'DESC']], })
-        const userPromise = User.findOne({ where: { id: id } })
+        const totalItems = Expense.countDocuments({ userId: id })
+        const dataPromise = Expense.find({ userId: id }).skip(skipItems).limit(Items_per_page)
+        const userPromise = User.findById({ _id: id })
         const [data, user, totalExpItems] = await Promise.all([dataPromise, userPromise, totalItems])
         const pageData = {
             currentPage: page,
@@ -28,66 +30,73 @@ exports.getData = async (req, res, next) => {
 }
 
 exports.postExpnseData = async (req, res, next) => {
-    const t = await sequelize.transaction()
+    const session = await mongoose.startSession()
+    session.startTransaction()
     const { Amount, Description, Category, userId } = req.body
     const prevTotal = req.user.totalAmount
     const totalAmount = Number(prevTotal) + Number(Amount)
+    const date = new Date()
     try {
-        const Data = await ExpenseData.create({
+        const Data = new Expense({
             Amount: Amount,
             Description: Description,
             Category: Category,
-            userId: userId
-        }, { transaction: t })
+            userId: userId,
+            createdAt:date
+        })
+        await Data.save({ session })
+        //Mongo Object to Js Object
+        const data = JsObject(Data)
 
-        await User.update(
-            {
-                totalAmount: totalAmount
-            }, {
-            where: { id: userId },
-            transaction: t
-        }
+        await User.findOneAndUpdate(
+            { _id: userId },
+            { totalAmount: totalAmount }
         )
-        // console.log(Data)
-        await t.commit()
-        res.status(201).json({ ...Data, success: true, message: "Successfully Added" })
+        res.status(201).json({ dataValues: { ...data }, success: true, message: "Successfully Added" })
+        await session.commitTransaction()
+        session.endSession()
+        console.log("***DONE****")
     } catch (err) {
-        await t.rollback()
+        await session.abortTransaction()
+        session.endSession()
         console.log(err)
         res.status(500).json({ message: "Server Error" })
     }
 }
 
 exports.deleteExpenseData = async (req, res, next) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
     const id = req.params.id
-    // console.log(id,">>>>>>>>id")
+
     const prevTotal = req.user.totalAmount
-    const t = await sequelize.transaction()
     try {
-        const data = await ExpenseData.findOne({ where: { id: id }, transaction: t })
-        // console.log("dta>>>>>",data)
-        const Amount = data.dataValues.Amount
-        const userId = data.dataValues.userId
+        const data = await Expense.findById({ _id: id })
+
+        const Amount = data.Amount
+        const userId = data.userId.toString()
         const totalAmount = Number(prevTotal) - Number(Amount)
-        await User.update(
-            { totalAmount: totalAmount },
-            { where: { id: userId }, transaction: t }
+
+        await User.findByIdAndUpdate(
+            { _id: userId },
+            { totalAmount: totalAmount }
         )
-        t.commit()
-        data.destroy()
+
+        await Expense.deleteOne({ _id: id })
         res.status(200).json({ message: "Data Deleted" })
+        await session.commitTransaction()
+        session.endSession()
     } catch (err) {
-        t.rollback()
         console.log(err)
         res.status(500).json({ message: "Server Error" })
+        await session.abortTransaction()
+        session.endSession()
     }
 }
 
 exports.LeaderBoardData = async (req, res, next) => {
     try {
-        const user = await User.findAll({
-            order: [["totalAmount", "DESC"]]
-        })
+        const user = await User.find().sort({ totalAmount: 'desc' })
         res.status(200).json([...user])
         res.end()
     } catch (err) {

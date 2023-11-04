@@ -1,4 +1,4 @@
-const ExpAuthData = require("../Model/User")
+const User = require("../Model/User")
 const PasswaordResetReq = require("../Model/PRRequest")
 const bcrypt = require("bcrypt")
 const saltRounds = 10
@@ -7,6 +7,8 @@ const { v4: uuidv4 } = require('uuid');
 const API_KEY = process.env.BREVO_API_KEY
 const Password_Link = process.env.PASSWORD_Link
 let SibApiV3Sdk = require('sib-api-v3-sdk');
+const mongoDb = require("mongodb")
+const ObjectId = mongoDb.ObjectId;
 
 
 function generateAccessToken(id, name) {
@@ -17,8 +19,10 @@ exports.postAuthData = async (req, res, next) => {
     const Name = req.body.name
     const email = req.body.email
     const password = req.body.password
+    console.log(Name, email, password, "Data")
     try {
-        const existMail = await ExpAuthData.findOne({ where: { email } })
+        const existMail = await User.findOne({ email: email })
+        console.log(existMail, "existMail")
         if (existMail) {
             res.status(409).json({ message: "Email Already Exist" })
         } else {
@@ -26,12 +30,14 @@ exports.postAuthData = async (req, res, next) => {
                 if (err) {
                     throw new Error("Somthing Wnet wrong")
                 } else {
-                    const User = await ExpAuthData.create({
+                    const user = new User({
                         Name: Name,
                         email: email,
                         password: hash
                     })
-                    res.status(201).json({ message: "User Register Successfully", user: User })
+                    await user.save()
+                    res.status(201).json({ message: "User Register Successfully", user: user })
+                    console.log("User Register Successfully")
                 }
             })
         }
@@ -45,17 +51,18 @@ exports.postLoginData = async (req, res, next) => {
     const password = req.body.password
     // console.log(email, password,"sdfhbsjdfsjd")
     try {
-        const User = await ExpAuthData.findOne({ where: { email } })
-        if (!User) {
+        const user = await User.findOne({ email: email })
+        if (!user) {
             res.status(404).json({ message: "Email Not Exist", success: false })
         } else {
-            const hash = User.password
+            const hash = user.password
             bcrypt.compare(password, hash, (err, result) => {
                 if (err) {
                     throw new Error({ message: "Somthing Went Wrong" })
                 }
                 if (result) {
-                    res.status(200).json({ message: "Successfully Login", success: true, user: User, tokenId: generateAccessToken(User.id, User.Name) })
+                    res.status(200).json({ message: "Successfully Login", success: true, user: user, tokenId: generateAccessToken(user.id, user.Name) })
+                    // console.log( user,"Successfully Login")
                 } else {
                     res.status(400).json({ message: "Incorrect Password ", success: false })
                 }
@@ -69,7 +76,7 @@ exports.postLoginData = async (req, res, next) => {
 
 
 exports.getAuthData = async (req, res, next) => {
-    res.send("Work Fine")
+    res.send("Work Fine and good")
 }
 
 
@@ -88,11 +95,12 @@ exports.postForgotpassWord = async (req, res, next) => {
         email: email
     }]
     try {
-        await PasswaordResetReq.create({
-            id: uuid,
+        const ResetPass = new PasswaordResetReq({
+            _id: uuid,
             isActive: true,
             userId: userId
         })
+        await ResetPass.save()
         const result = await apiInstance.sendTransacEmail({
             Sender,
             to: receivers,
@@ -100,7 +108,7 @@ exports.postForgotpassWord = async (req, res, next) => {
             textContent: "This is testing mail",
             htmlContent: `<a href=${Password_Link}/${uuid}>Reset Passwaord</a>`
         })
-        console.log({ result: result, message: "Successfull" })
+        console.log({ result: result, message: "Successfully Reset Passwaord" })
         res.end()
     } catch (err) {
         console.log(err, "<<<<<<<<<<ERRRR")
@@ -110,11 +118,12 @@ exports.postForgotpassWord = async (req, res, next) => {
 exports.getResetPassword = async (req, res, next) => {
     const uuid = req.params.uuid
     try {
-        const User = await PasswaordResetReq.findOne({ where: { id: uuid } })
-        const isActive = User.dataValues.isActive
-        const userId = User.dataValues.userId
+        const User = await PasswaordResetReq.findOne({ _id: uuid })
+        console.log(User, "checking Actiovtiy")
+        const isActive = User.isActive
+        const userId = User.userId.toString()
         if (isActive) {
-            return res.render("ResetPassword", { userId: userId })
+            return res.render("ResetPassword", { userId: userId, requestId: uuid })
         } else {
             res.status(403).json({ message: "Unauthorized" })
         }
@@ -128,11 +137,12 @@ exports.getResetPassword = async (req, res, next) => {
 
 exports.postUpdatePassword = async (req, res, next) => {
     const id = req.params.userId
-    const { password, confirmpassword, userId } = req.body
-    console.log(id,"req.req.params.uuid")
+    const { password, confirmpassword, userId, requestId } = req.body
+    console.log(id, "req.req.params.uuid")
 
     try {
-        const user = await ExpAuthData.findOne({ where: { id: userId } })
+        const user = await User.findOne({ _id: userId })
+        console.log(user, "><<<<<<user")
         if (!user) {
             return res.status(404), json({ message: "User Not Found" })
         } else {
@@ -140,18 +150,13 @@ exports.postUpdatePassword = async (req, res, next) => {
                 if (err) {
                     throw new Error(" Somthing Went Wrong")
                 } else {
-                    await user.update({
-                        password: hash
-                    }, {
-                        where: { id: userId }
-                    })
-                    const u =await PasswaordResetReq.update({
-                        isActive:false
-                    },{
-                        where:{userId:id}
-                    })
-                    console.log(u,"userknknv")
-
+                    await User.findByIdAndUpdate(
+                        { _id: userId },
+                        { password: hash }
+                    )
+                    console.log(userId)
+                    //deletting active request status after reseting password
+                    await PasswaordResetReq.findByIdAndRemove({ _id: requestId })
                 }
                 res.status(200).json({ message: "Password Successfully Updated" })
             })

@@ -33,8 +33,8 @@ exports.updateTransactionEtatus = async (req, res) => {
         const { payment_id, order_id } = req.body
         console.log("payment_id>>>", payment_id)
         const order = await Order.findOne({ where: { orderid: order_id } })
-        const promise1 = order.update({ paymentid: payment_id, status: "SUCCESSFUL" })
-        const promise2 = req.user.update({ isprimiumUser: true })
+        const promise1 = order.updateOne({ paymentid: payment_id, status: "SUCCESSFUL" })
+        const promise2 = req.user.updateOne({ isprimiumUser: true })
 
         Promise.all([promise1, promise2]).then(() => {
             return res.status(202).json({ success: true, message: "Transaction Successful" })
@@ -53,8 +53,8 @@ exports.updateFailedStatus = async (req, res) => {
         const { payment_id, order_id } = req.body
 
         const order = await Order.findOne({ where: { orderid: order_id } })
-        const promise1 = order.update({ paymentid: payment_id, status: "FAILED" })
-        const promise2 = req.user.update({ isprimiumUser: false })
+        const promise1 = order.updateOne({ paymentid: payment_id, status: "FAILED" })
+        const promise2 = req.user.updateOne({ isprimiumUser: false })
 
         Promise.all([promise1, promise2]).then(() => {
             return res.status(202).json({ success: true, message: "Transaction Successful" })

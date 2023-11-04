@@ -7,10 +7,9 @@ const Authenticate = (req, res, next) => {
         const tokenId = req.header("Authorization")
         // console.log("token>>> ", tokenId)
         const user = jwt.verify(tokenId, secreateKey)
-        // console.log("user>>.. ",user)
-        User.findByPk(user.userId).then(user => {
+        User.findById(user.userId).then(user => {
             // console.log("user>>", JSON.stringify(user))
-            if(user){
+            if (user) {
                 req.user = user
                 next()
             }
@@ -22,4 +21,4 @@ const Authenticate = (req, res, next) => {
     }
 }
 
-module.exports= Authenticate
+module.exports = Authenticate
